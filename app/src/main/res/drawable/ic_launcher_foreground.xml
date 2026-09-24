@@ -1,0 +1,51 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Central zero-crossing baseline -->
+    <path
+        android:pathData="M24,54 L84,54"
+        android:strokeWidth="1.5"
+        android:strokeColor="#475569"
+        android:strokeLineCap="round" />
+
+    <!-- In-Phase Wave (Cyan) -->
+    <path
+        android:pathData="M26,54 C33,36 41,36 48,54 C55,72 63,72 70,54 C74,45 78,45 82,54"
+        android:strokeWidth="4"
+        android:strokeColor="#38BDF8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Anti-Phase Wave (Orange/Pink 180° Inverted) -->
+    <path
+        android:pathData="M26,54 C33,72 41,72 48,54 C55,36 63,36 70,54 C74,63 78,63 82,54"
+        android:strokeWidth="3"
+        android:strokeColor="#FB923C"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Cancellation Nodes (Glowing Interference Dots at zero crossings) -->
+    <path
+        android:pathData="M26,54 A2.5,2.5 0 1 1 26,53.9 Z"
+        android:fillColor="#E2E8F0" />
+    <path
+        android:pathData="M48,54 A3,3 0 1 1 48,53.9 Z"
+        android:fillColor="#38BDF8" />
+    <path
+        android:pathData="M70,54 A3,3 0 1 1 70,53.9 Z"
+        android:fillColor="#FB923C" />
+    <path
+        android:pathData="M82,54 A2.5,2.5 0 1 1 82,53.9 Z"
+        android:fillColor="#E2E8F0" />
+
+    <!-- Phase Inversion Polarity Ø badge at top right -->
+    <path
+        android:pathData="M76,33 A5,5 0 1 0 76,43 A5,5 0 1 0 76,33 M72,44 L80,32"
+        android:strokeWidth="1.8"
+        android:strokeColor="#F43F5E"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>

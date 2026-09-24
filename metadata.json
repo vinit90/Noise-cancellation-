@@ -1,0 +1,6 @@
+{
+  "name": "PhaseLab",
+  "description": "Real-time acoustic phase inversion and active noise cancellation DSP lab experiment.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
