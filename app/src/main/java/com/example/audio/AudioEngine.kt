@@ -31,6 +31,7 @@ class AudioEngine(private val context: Context) {
     }
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    val deviceManager = AudioDeviceManager(context)
 
     // Observable states
     private val _engineStatus = MutableStateFlow<EngineStatus>(EngineStatus.Idle)
@@ -44,6 +45,7 @@ class AudioEngine(private val context: Context) {
     @Volatile var isPhaseInverted: Boolean = false
     @Volatile var delayMs: Int = 0
     @Volatile var isLimiterEnabled: Boolean = true
+    @Volatile var isFeedbackShieldEnabled: Boolean = true
     @Volatile var isMuted: Boolean = false
     @Volatile var isTestToneEnabled: Boolean = false
     @Volatile var testToneFrequencyHz: Float = 440f
@@ -60,9 +62,12 @@ class AudioEngine(private val context: Context) {
     private val ringBuffer = FloatArray(RING_BUFFER_SIZE)
     private var writeHead = 0
 
-    // Downsampled waveforms for UI oscilloscope (128 points)
-    private val uiInputWaveform = FloatArray(128)
-    private val uiOutputWaveform = FloatArray(128)
+    // Scope capture ring buffer (1024 samples) and 256-point UI arrays
+    private val scopeRingIn = FloatArray(1024)
+    private val scopeRingOut = FloatArray(1024)
+    private var scopeHead = 0
+    private val uiInputWaveform = FloatArray(256)
+    private val uiOutputWaveform = FloatArray(256)
 
     /**
      * Starts the audio engine on a dedicated high-priority audio thread.
@@ -100,6 +105,7 @@ class AudioEngine(private val context: Context) {
             return false
         }
         audioRecord = record
+        deviceManager.applyPreferredInput(record)
 
         // 2. Configure and initialize AudioTrack
         val track = createAudioTrack(bufferFrames)
@@ -113,6 +119,7 @@ class AudioEngine(private val context: Context) {
             return false
         }
         audioTrack = track
+        deviceManager.applyPreferredOutput(track)
 
         // Clear ring buffer
         ringBuffer.fill(0f)
@@ -200,6 +207,22 @@ class AudioEngine(private val context: Context) {
     fun unmute(restoredGain: Float = 1.0f) {
         isMuted = false
         gain = restoredGain.coerceIn(0f, 2.0f)
+    }
+
+    /**
+     * Switches the active microphone / audio input hardware endpoint.
+     */
+    fun selectPreferredInput(deviceId: Int?) {
+        deviceManager.selectInput(deviceId)
+        deviceManager.applyPreferredInput(audioRecord)
+    }
+
+    /**
+     * Switches the active loudspeaker / audio output hardware endpoint (e.g. Phone vs Bluetooth).
+     */
+    fun selectPreferredOutput(deviceId: Int?) {
+        deviceManager.selectOutput(deviceId)
+        deviceManager.applyPreferredOutput(audioTrack)
     }
 
     private fun createAudioRecord(audioSource: Int, burstFrames: Int): AudioRecord? {
@@ -310,8 +333,18 @@ class AudioEngine(private val context: Context) {
             var sumSquareIn = 0.0
             var sumSquareOut = 0.0
 
+            val isHighFeedbackRisk = deviceManager.isFeedbackRiskHigh.value
+            val isBtOutput = deviceManager.isBluetoothOutputConnected.value
+
             // Snapshot dynamic parameters
-            val currentGain = if (isMuted) 0f else gain
+            // If acoustic feedback shield is active on co-located phone mic + phone speaker,
+            // clamp maximum forward loop gain to 0.70x to suppress acoustic feedback squeal.
+            val rawGain = if (isMuted) 0f else gain
+            val currentGain = if (isHighFeedbackRisk && isFeedbackShieldEnabled) {
+                rawGain.coerceAtMost(0.70f)
+            } else {
+                rawGain
+            }
             val invertPhase = isPhaseInverted
             val currentDelayMs = delayMs
             val limiterOn = isLimiterEnabled
@@ -383,20 +416,18 @@ class AudioEngine(private val context: Context) {
                 val outShort = (dspSample * 32767.0f).toInt().coerceIn(-32768, 32767).toShort()
                 outBuffer[i] = outShort
 
-                // Populate live UI oscilloscope buffers (downsampled)
-                if (i % downsampleStep == 0) {
-                    val uiIdx = (i / downsampleStep).coerceIn(0, 127)
-                    uiInputWaveform[uiIdx] = inputSampleFloat
-                    uiOutputWaveform[uiIdx] = dspSample
-                }
+                // Write to scope capture ring buffer (1024 samples)
+                scopeRingIn[scopeHead] = inputSampleFloat
+                scopeRingOut[scopeHead] = dspSample
+                scopeHead = (scopeHead + 1) and 1023
             }
 
             // 3. Write processed anti-phase burst to low-latency AudioTrack
             track.write(outBuffer, 0, samplesRead, AudioTrack.WRITE_BLOCKING)
 
-            // 4. Periodically publish telemetry to UI (approx. 25-30 fps)
+            // 4. Periodically publish telemetry to UI (approx. 30 fps)
             val now = System.currentTimeMillis()
-            if (now - lastTelemetryTimeMs >= 35) {
+            if (now - lastTelemetryTimeMs >= 32) {
                 val inRms = sqrt(sumSquareIn / samplesRead).toFloat().coerceIn(0f, 1f)
                 val outRms = sqrt(sumSquareOut / samplesRead).toFloat().coerceIn(0f, 1f)
 
@@ -405,6 +436,52 @@ class AudioEngine(private val context: Context) {
                 val outDbfs = if (outRms > 0.001f) (20f * log10(outRms)).coerceIn(-60f, 0f) else -60f
 
                 val distanceCm = currentDelayMs * SPEED_OF_SOUND_CM_PER_MS
+
+                // Oscilloscope Edge Trigger & Waveform Extraction
+                // Search for rising zero-crossing in the most recent 512 samples
+                val currentScopeHead = scopeHead
+                var triggerOffset = 256 // default fallback
+                var maxSample = -1.0f
+                var minSample = 1.0f
+                var zeroCrossings = 0
+
+                // Analyze 512 samples backwards
+                for (offset in 512 downTo 257) {
+                    val idx0 = (currentScopeHead - offset + 1024) and 1023
+                    val idx1 = (currentScopeHead - offset + 1 + 1024) and 1023
+                    val s0 = scopeRingIn[idx0]
+                    val s1 = scopeRingIn[idx1]
+
+                    if (s0 > maxSample) maxSample = s0
+                    if (s0 < minSample) minSample = s0
+
+                    if (s0 <= 0f && s1 > 0f) {
+                        zeroCrossings++
+                        if (triggerOffset == 256 && (s1 - s0) > 0.01f) {
+                            triggerOffset = offset
+                        }
+                    }
+                }
+
+                val peakToPeak = (maxSample - minSample).coerceAtLeast(0f)
+                // Frequency estimation based on zero-crossings over 512 samples @ 48kHz
+                val estimatedFreq = if (zeroCrossings > 1 && peakToPeak > 0.02f) {
+                    (zeroCrossings * SAMPLE_RATE / 512f)
+                } else {
+                    0f
+                }
+
+                // Copy 256 samples starting from trigger point into UI arrays
+                for (pt in 0 until 256) {
+                    val readIdx = (currentScopeHead - triggerOffset + pt + 1024) and 1023
+                    uiInputWaveform[pt] = scopeRingIn[readIdx]
+                    uiOutputWaveform[pt] = scopeRingOut[readIdx]
+                }
+
+                val activeInName = deviceManager.availableInputs.value
+                    .firstOrNull { it.id == deviceManager.selectedInputId.value }?.name ?: "Phone Built-in Mic"
+                val activeOutName = deviceManager.availableOutputs.value
+                    .firstOrNull { it.id == deviceManager.selectedOutputId.value }?.name ?: (if (isBtOutput) "Bluetooth Speaker" else "Phone Loudspeaker")
 
                 _telemetry.value = AudioEngineTelemetry(
                     inputRms = inRms,
@@ -417,8 +494,14 @@ class AudioEngine(private val context: Context) {
                     estimatedHardwareLatencyMs = estimatedHardwareLatencyMs,
                     totalDelayMs = currentDelayMs.toFloat(),
                     equivalentDistanceCm = distanceCm,
+                    peakToPeak = peakToPeak,
+                    estimatedFreqHz = estimatedFreq,
                     inputWaveform = uiInputWaveform.copyOf(),
-                    outputWaveform = uiOutputWaveform.copyOf()
+                    outputWaveform = uiOutputWaveform.copyOf(),
+                    selectedInputName = activeInName,
+                    selectedOutputName = activeOutName,
+                    isBluetoothOutput = isBtOutput,
+                    isFeedbackRisk = isHighFeedbackRisk
                 )
 
                 limiterTriggeredInWindow = false

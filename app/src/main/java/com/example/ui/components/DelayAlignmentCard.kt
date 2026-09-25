@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,22 +43,23 @@ import com.example.ui.theme.LabDarkVoid
 import com.example.ui.theme.VioletMod
 import java.util.Locale
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DelayAlignmentCard(
     delayMs: Int,
     onDelayChanged: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // 343 m/s = 34.3 cm/ms = 0.343 m/ms
+    // Speed of sound = 343 m/s = 0.343 m/ms = 34.3 cm/ms
     val distanceMeters = delayMs * 0.343f
-    val distanceInches = delayMs * 13.504f
+    val distanceFeet = distanceMeters * 3.28084f
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(LabDarkCard, RoundedCornerShape(16.dp))
             .border(1.dp, LabDarkBorder, RoundedCornerShape(16.dp))
-            .padding(16.dp)
+            .padding(14.dp)
             .testTag("delay_control_card")
     ) {
         Row(
@@ -67,38 +69,37 @@ fun DelayAlignmentCard(
         ) {
             Column {
                 Text(
-                    text = "ACOUSTIC DELAY LINE (RING BUFFER)",
+                    text = "ACOUSTIC & BT DELAY LINE",
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp
+                        letterSpacing = 1.1.sp
                     ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Acoustic Path Alignment",
+                    text = "Acoustic Path & BLE Alignment",
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
+                        fontSize = 14.sp
                     ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(top = 2.dp)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
-            // Big Live Delay Readout Badge
+            // Delay Readout Badge
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(VioletMod.copy(alpha = 0.15f))
                     .border(1.dp, VioletMod.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
                 Text(
                     text = "${delayMs} ms",
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     color = VioletMod
                 )
             }
@@ -106,7 +107,7 @@ fun DelayAlignmentCard(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Equivalent Acoustic Distance Banner
+        // Distance / Bluetooth Latency indicator
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -117,26 +118,27 @@ fun DelayAlignmentCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = String.format(Locale.US, "Air Path: %.2f m (%.1f in)", distanceMeters, distanceInches),
-                fontFamily = FontFamily.Monospace,
+                text = String.format(Locale.US, "Acoustic Flight: %.2f m (%.1f ft)", distanceMeters, distanceFeet),
                 fontSize = 11.sp,
-                color = Color(0xFF94A3B8)
+                fontFamily = FontFamily.Monospace,
+                color = CyanNeon
             )
             Text(
-                text = "${delayMs * 48} samples @ 48kHz",
-                fontFamily = FontFamily.Monospace,
+                text = if (delayMs >= 40) "BLE Buffer Sync" else "Direct Air Path",
                 fontSize = 10.sp,
-                color = Color(0xFF64748B)
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                color = if (delayMs >= 40) VioletMod else Color(0xFF94A3B8)
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Slider with - and + step buttons
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             IconButton(
                 onClick = { onDelayChanged((delayMs - 1).coerceAtLeast(0)) },
@@ -149,15 +151,15 @@ fun DelayAlignmentCard(
                     imageVector = Icons.Default.Remove,
                     contentDescription = "Decrease delay 1ms",
                     tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
 
             Slider(
                 value = delayMs.toFloat(),
                 onValueChange = { onDelayChanged(it.toInt()) },
-                valueRange = 0f..100f,
-                steps = 99,
+                valueRange = 0f..200f,
+                steps = 199,
                 colors = SliderDefaults.colors(
                     thumbColor = VioletMod,
                     activeTrackColor = VioletMod,
@@ -169,7 +171,7 @@ fun DelayAlignmentCard(
             )
 
             IconButton(
-                onClick = { onDelayChanged((delayMs + 1).coerceAtMost(100)) },
+                onClick = { onDelayChanged((delayMs + 1).coerceAtMost(200)) },
                 modifier = Modifier
                     .size(36.dp)
                     .background(LabDarkSurfaceVariant, CircleShape)
@@ -179,23 +181,29 @@ fun DelayAlignmentCard(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Increase delay 1ms",
                     tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
 
-        // Quick Preset Chips
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // Quick Preset Chips (Air path & Bluetooth latency modes)
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            listOf(0, 3, 10, 25, 50).forEach { presetMs ->
+            val presets = listOf(
+                0 to "0ms (Direct)",
+                5 to "5ms (1.7m)",
+                15 to "15ms (5.1m)",
+                50 to "50ms (BLE Low)",
+                120 to "120ms (BT A2DP)"
+            )
+
+            presets.forEach { (presetMs, label) ->
                 val isSelected = delayMs == presetMs
                 Box(
                     modifier = Modifier
-                        .weight(1f)
                         .clip(RoundedCornerShape(6.dp))
                         .background(if (isSelected) VioletMod.copy(alpha = 0.25f) else LabDarkVoid)
                         .border(
@@ -204,12 +212,12 @@ fun DelayAlignmentCard(
                             RoundedCornerShape(6.dp)
                         )
                         .clickable { onDelayChanged(presetMs) }
-                        .padding(vertical = 6.dp),
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "${presetMs}ms",
-                        fontSize = 11.sp,
+                        text = label,
+                        fontSize = 10.5.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSelected) VioletMod else Color(0xFF94A3B8)

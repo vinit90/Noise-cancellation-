@@ -14,8 +14,14 @@ data class AudioEngineTelemetry(
     val estimatedHardwareLatencyMs: Float = 5.0f,
     val totalDelayMs: Float = 0f,
     val equivalentDistanceCm: Float = 0f,
-    val inputWaveform: FloatArray = FloatArray(128),
-    val outputWaveform: FloatArray = FloatArray(128)
+    val peakToPeak: Float = 0f,
+    val estimatedFreqHz: Float = 0f,
+    val inputWaveform: FloatArray = FloatArray(256),
+    val outputWaveform: FloatArray = FloatArray(256),
+    val selectedInputName: String = "Phone Built-in Mic",
+    val selectedOutputName: String = "Phone Loudspeaker",
+    val isBluetoothOutput: Boolean = false,
+    val isFeedbackRisk: Boolean = true
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -33,6 +39,12 @@ data class AudioEngineTelemetry(
         if (estimatedHardwareLatencyMs != other.estimatedHardwareLatencyMs) return false
         if (totalDelayMs != other.totalDelayMs) return false
         if (equivalentDistanceCm != other.equivalentDistanceCm) return false
+        if (peakToPeak != other.peakToPeak) return false
+        if (estimatedFreqHz != other.estimatedFreqHz) return false
+        if (selectedInputName != other.selectedInputName) return false
+        if (selectedOutputName != other.selectedOutputName) return false
+        if (isBluetoothOutput != other.isBluetoothOutput) return false
+        if (isFeedbackRisk != other.isFeedbackRisk) return false
         if (!inputWaveform.contentEquals(other.inputWaveform)) return false
         if (!outputWaveform.contentEquals(other.outputWaveform)) return false
 
@@ -50,6 +62,12 @@ data class AudioEngineTelemetry(
         result = 31 * result + estimatedHardwareLatencyMs.hashCode()
         result = 31 * result + totalDelayMs.hashCode()
         result = 31 * result + equivalentDistanceCm.hashCode()
+        result = 31 * result + peakToPeak.hashCode()
+        result = 31 * result + estimatedFreqHz.hashCode()
+        result = 31 * result + selectedInputName.hashCode()
+        result = 31 * result + selectedOutputName.hashCode()
+        result = 31 * result + isBluetoothOutput.hashCode()
+        result = 31 * result + isFeedbackRisk.hashCode()
         result = 31 * result + inputWaveform.contentHashCode()
         result = 31 * result + outputWaveform.contentHashCode()
         return result
